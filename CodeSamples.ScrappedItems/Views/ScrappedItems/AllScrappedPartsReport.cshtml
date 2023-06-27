@@ -1,0 +1,208 @@
+@using CodeSamples.ScrappedItems.Utilities;
+@model CodeSamples.ScrappedItems.Models.ScrappedItemsListViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+
+@section script {
+    <script type="text/javascript">
+        const idInput = document.getElementById('scrap-id');
+        const typeInput = document.getElementById('scrap-type');
+        const unscrapReasonInput = document.getElementById('unscrap-reason');
+        const unscrapBatchIdSpan = document.getElementById('unscrap-batch-id-span');
+        const errorDisplay = document.getElementById('unscrap-error-display');
+        const errorList = errorDisplay.children[0];
+
+        const searchForm = document.getElementById('search-form');
+        document.getElementById('export-btn').addEventListener('click', () => {
+            searchForm.action = '@Url.Action("ExportAllScrappedPartsReport", "ScrappedItems")';
+            searchForm.submit();
+            setTimeout(() => {
+                searchForm.action = '@Url.Action("AllScrappedPartsReport", "ScrappedItems")';
+            }, 1000);
+        });
+
+        $('#unscrap-dialog').dialog({
+            autoOpen: false,
+            modal: true,
+            position: {
+                my: 'center top',
+                at: 'center top'
+            },
+            width: 400,
+            title: 'Unscrap Item',
+            close: () => {
+                document.querySelectorAll('.active-scrapped-btn').forEach(btn => {
+                    btn.classList.remove('active-scrapped-btn');
+                });
+                errorDisplay.style.display = 'none';
+                errorList.innerHTML = '';
+                idInput.value = null;
+                typeInput.value = null;
+                unscrapReasonInput.value = null;
+                unscrapBatchIdSpan.innerHTML = '';
+            }
+        });
+
+        const scrapForm = document.getElementById('unscrap-from');
+        scrapForm.addEventListener('submit', e => {
+            e.preventDefault();
+            postAjaxForm(scrapForm, response => {
+                console.log(response);
+                if (response.success) {
+                    document.querySelectorAll('.active-scrapped-btn').forEach(btn => {
+                        const parent = btn.parentElement;
+                        const dateSpan = document.createElement('span');
+                        dateSpan.innerHTML = moment().format('M/D/YYYY h:mm A');
+                        btn.remove();
+                        parent.appendChild(dateSpan);
+                    });
+                    $('#unscrap-dialog').dialog('close');
+                } else {
+                    errorDisplay.style.display = '';
+                    const listItem = document.createElement('li');
+                    listItem.innerHTML = response.errorMessage;
+                    errorList.appendChild(listItem);
+                }
+            }, error => {
+                console.log(error);
+                //TODO: show error
+            });
+        });
+
+        document.querySelectorAll('.btn-reverse-scrapped').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.preventDefault();
+                btn.classList.add('active-scrapped-btn');
+                $('#unscrap-dialog').dialog('open');
+                idInput.value = btn.dataset.id;
+                typeInput.value = btn.dataset.type;
+                unscrapBatchIdSpan.innerHTML = btn.dataset.batchId;
+            });
+        });
+    </script>
+}
+
+<h2 class="title">All Scrapped Items Report</h2>
+
+<div id="search-form-div" class="search-form">
+    <form action="@Url.Action("AllScrappedPartsReport", "ScrappedItems")" id="search-form" method="post">
+        <div class="input-field">
+            <label>Search (MWD_Id,Batch Id, etc.)</label>
+            <input type="text" class="js-no-submit" name="SearchText" value="@Model.SearchText" />
+        </div>
+        <div class="input-field">
+            <label>Area</label>
+            <select name="Area">
+                <option value="">All</option>
+                @foreach (var area in CodeSamples.ScrappedItems.Utilities.EnumUtilities.GetEnumValues<CodeSamples.ScrappedItems.Models.ScrapedAreas>())
+                {
+                    <option value="@area" @(Model.Area == area ? "selected" : "")>@area.GetDescription()</option>
+                }
+            </select>
+        </div>
+        <div></div>
+        <div class="input-field input-date">
+            <label>Start Date</label>
+            <input id="start-date" name="StartDate" class="js-datepicker-date js-no-submit js-dates" type="text" value="@Model.StartDate" />
+            <a class="input-icon calendar-icon js-calendar"><img src="/Content/images/ico-calendar.png"></a>
+        </div>
+        <div class="input-field input-date">
+            <label>End Date</label>
+            <input id="end-date" name="EndDate" class="js-datepicker-date js-no-submit js-dates" type="text" value="@Model.EndDate" />
+            <a class="input-icon calendar-icon js-calendar"><img src="/Content/images/ico-calendar.png"></a>
+        </div>
+        <div class="input-field">
+            <label>Status</label>
+            <select name="IsScrapped">
+                <option></option>
+                <option @(Model.IsScrapped == true ? "selected" : "") value="true">Scrapped</option>
+                <option @(Model.IsScrapped == false ? "selected" : "") value="false">Reversed</option>
+            </select>
+        </div>
+        <div class="clear"></div>
+        <div class="input-field input-submit">
+            <input type="submit" id="search-btn" value="Go">
+        </div>
+        <div class="input-field input-submit">
+            <input type="button" id="export-btn" value="Export">
+        </div>
+        <input type="hidden" id="is-export" name="IsExport" value="0" />
+        <input type="hidden" id="sort-order" name="SortOrder" value="@Model.SortOrder" />
+        <input type="hidden" id="sort-column" name="SortColumn" value="@Model.SortColumn" />
+        <input type="hidden" id="page" name="Page" value="@Model.Page" />
+    </form>
+</div>
+
+<div id="content-wrapper" style="margin-left: 5px;">
+    @if (Model.Results.Count > 0)
+    {
+        @Html.PagerSection("items-pager", "search-form", Model.Page, Model.PageCount, Model.PageSize ?? 0, Model.ItemCount)
+        <table>
+            <thead>
+                <tr>
+                    <th class="table-header" data-column="1" width="120">Date Scrapped</th>
+                    <th class="table-header" data-column="3">Area</th>
+                    <th class="table-header" data-column="4" width="80">Batch Id</th>
+                    <th class="table-header" data-column="5">Quantity</th>
+                    <th class="table-header" data-column="6">User who Scrapped</th>
+                    <th class="table-header" data-column="7">Reason Scrapped</th>
+                    <th class="table-header" data-column="8">Scrap Reversal</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model.Results)
+                {
+                    <tr>
+                        <td>@item.ScrappedDateTime.ToString("g")</td>
+                        <td>@item.AreaScrapped.GetDescription()</td>
+                        <td>@item.DisplayId</td>
+                        <td>@item.QuantityScrapped</td>
+                        <td>@item.ScrappedUserFullName</td>
+                        <td>@item.ScrappedReason</td>
+                        @if (item.ReversedDateTime.HasValue)
+                        {
+                            <td>@item.ReversedDateTime.Value.ToString("g")</td>
+                        }
+                        else
+                        {
+                            <td>
+                                <button class="btn-reverse-scrapped"
+                                        data-id="@item.IdScrapped"
+                                        data-type="@item.AreaScrapped"
+                                        data-batch-id="@item.DisplayId">
+                                    Reverse
+                                </button>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <div class="no-results content">There are no items scrapped in QA in this date range.</div>
+    }
+</div>
+
+<div id="unscrap-dialog" class="dialog" title="Unscrap Sagger">
+    <div id="unscrap-error-display" class="error" style="display:none">
+        <ul id="unscrap-error-list"></ul>
+    </div>
+    <form id="unscrap-from" action="@Url.Action("UnscrapeItem")">
+        <div>
+            <p>Please provide a reaons to unscrap <span id="unscrap-batch-id-span"></span> <span id="unscrap-sagger-sagger-number-span"></span> <span id="unscrap-sagger-cut-part-span"></span>.</p>
+        </div>
+        <div>
+            <textarea id="unscrap-reason" name="reason"></textarea>
+            <input type="hidden" id="scrap-id" name="id" />
+            <input type="hidden" id="scrap-type" name="area" />
+        </div>
+        <div class="clear"></div>
+
+        <button type="submit" class="btn btn-orange">Unscrap Sagger</button>
+    </form>
+</div>
+

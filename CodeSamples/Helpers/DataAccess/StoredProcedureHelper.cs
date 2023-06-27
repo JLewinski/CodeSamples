@@ -168,8 +168,16 @@ namespace CodeSamples.Helpers.DataAccess
             }
             catch (SqlException e)
             {
-                throw new SampleDbException(e, storedProcedureName, parameters);
+
+                //throw new SampleDbException(e, storedProcedureName, parameters);
+                itemCount = 0;
             }
+            catch (Exception)
+            {
+                itemCount = 0;
+                //obviously doesn't work bc there's no db to connect to
+            }
+
             return list;
         }
 
